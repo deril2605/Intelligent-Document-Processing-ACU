@@ -317,6 +317,10 @@ def _pretty_value(value: Any) -> str:
 
 def _summarize_value(value: Any) -> str:
     if isinstance(value, list):
+        rows = _items_to_rows(value)
+        if rows:
+            preview = _format_items_preview(rows)
+            return preview
         return f"{len(value)} item(s)"
     if isinstance(value, dict):
         return "Details"
@@ -325,6 +329,59 @@ def _summarize_value(value: Any) -> str:
 
 def _hash_bytes(data: bytes) -> str:
     return hashlib.sha1(data).hexdigest()
+
+
+def _extract_cell_value(cell: Any) -> Any:
+    if not isinstance(cell, dict):
+        return cell
+    if "valueString" in cell:
+        return cell["valueString"]
+    if "valueNumber" in cell:
+        return cell["valueNumber"]
+    if "valueDate" in cell:
+        return cell["valueDate"]
+    if "valueBoolean" in cell:
+        return cell["valueBoolean"]
+    if "value" in cell:
+        return cell["value"]
+    return None
+
+
+def _items_to_rows(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rows: List[Dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, dict) and isinstance(item.get("valueObject"), dict):
+            row: Dict[str, Any] = {}
+            for key, cell in item["valueObject"].items():
+                row[key] = _extract_cell_value(cell)
+            if row:
+                rows.append(row)
+                continue
+        if isinstance(item, dict):
+            row = {}
+            for key, cell in item.items():
+                row[key] = _extract_cell_value(cell)
+            if row:
+                rows.append(row)
+                continue
+    return rows
+
+
+def _format_items_preview(rows: List[Dict[str, Any]]) -> str:
+    if not rows:
+        return "0 item(s)"
+    parts = []
+    for row in rows[:3]:
+        desc = row.get("Description") or row.get("description") or ""
+        amt = row.get("Amount") or row.get("amount")
+        label = str(desc).strip() if desc else ""
+        if amt is not None:
+            label = f"{label} (${amt})" if label else f"${amt}"
+        parts.append(label or "Item")
+    more = "..." if len(rows) > 3 else ""
+    return f"{len(rows)} item(s): " + "; ".join(parts) + (f" {more}" if more else "")
 
 
 def _find_first_category(obj: Any) -> Optional[Tuple[str, Optional[float]]]:
@@ -428,6 +485,8 @@ def _ensure_session_state() -> None:
         st.session_state.render_cache_key = None
     if "page_images" not in st.session_state:
         st.session_state.page_images = None
+    if "edited_fields" not in st.session_state:
+        st.session_state.edited_fields = {}
 
 
 _ensure_session_state()
@@ -615,9 +674,11 @@ if st.session_state.analysis_fields and st.session_state.page_images:
 
     with left:
         st.subheader("Extracted Fields")
+        edited_fields = st.session_state.edited_fields
         field_labels: List[str] = []
         for fobj in fields:
-            preview = _summarize_value(fobj.get("value"))
+            current_value = edited_fields.get(fobj["name"], fobj.get("value"))
+            preview = _summarize_value(current_value)
             if len(preview) > 80:
                 preview = preview[:77] + "..."
             field_labels.append(f"{fobj['name']}: {preview}")
@@ -633,7 +694,53 @@ if st.session_state.analysis_fields and st.session_state.page_images:
         st.markdown("#### Selected Field")
         st.write("Field:", selected_field["name"])
         value = selected_field.get("value")
-        st.write("Value:", _summarize_value(value))
+        current_value = edited_fields.get(selected_field["name"], value)
+        st.write("Value:", _summarize_value(current_value))
+
+        st.markdown("#### Editable Value")
+        edit_key = f"edit_{selected_field['name']}"
+        if isinstance(current_value, list):
+            rows = _items_to_rows(current_value)
+            if rows:
+                edited_rows = st.data_editor(
+                    rows,
+                    use_container_width=True,
+                    num_rows="dynamic",
+                    key=edit_key,
+                )
+                edited_fields[selected_field["name"]] = edited_rows
+            else:
+                edited_text = st.text_area(
+                    "Items (JSON)",
+                    value=json.dumps(current_value, indent=2),
+                    key=edit_key,
+                )
+                try:
+                    edited_fields[selected_field["name"]] = json.loads(edited_text)
+                except Exception:
+                    st.caption("Invalid JSON. Fix to apply edits.")
+        elif isinstance(current_value, dict):
+            edited_text = st.text_area(
+                "Details (JSON)",
+                value=json.dumps(current_value, indent=2),
+                key=edit_key,
+            )
+            try:
+                edited_fields[selected_field["name"]] = json.loads(edited_text)
+            except Exception:
+                st.caption("Invalid JSON. Fix to apply edits.")
+        elif isinstance(current_value, bool):
+            edited_fields[selected_field["name"]] = st.checkbox(
+                "Value",
+                value=current_value,
+                key=edit_key,
+            )
+        else:
+            edited_fields[selected_field["name"]] = st.text_input(
+                "Value",
+                value=_pretty_value(current_value),
+                key=edit_key,
+            )
 
         if selected_field.get("regions"):
             pages_for_field = sorted({r["pageNumber"] for r in selected_field["regions"]})
