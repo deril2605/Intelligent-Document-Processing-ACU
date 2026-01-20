@@ -1,23 +1,51 @@
-# Intelligent Document Review App (app_main.py) and Setup Script (prereq.py)
+# Azure Content Understanding
 
-This folder contains the Streamlit review app (`app_main.py`) and a one-time setup script
-(`prereq.py`) that creates the required Azure Content Understanding resources.
+This demo is built on Azure Content Understanding, which provides document classification,
+field extraction, and source location metadata (bounding boxes). The app uses a custom
+classifier to route documents to the correct analyzer, then renders the extracted fields
+alongside the original PDF for human validation. It is designed to be a human-in-the-loop
+review experience on top of Content Understanding's structured outputs.
 
-The app implements the PRD workflow:
+Watch the Demo here (Click below thumbnail)
+[![Watch the demo](https://img.youtube.com/vi/pr0_eUm83WA/maxresdefault.jpg)](https://www.youtube.com/watch?v=pr0_eUm83WA)
+
+# Intelligent Document Review App
+
+This folder contains the Streamlit review app (`app_main.py`) and the one-time
+setup script (`prereq.py`) for the Intelligent Document Processing demo.
+
+The app workflow:
 1) Upload a PDF.
-2) Classify it into one of three document types.
+2) Classify it into one of three types.
 3) Route to the matching analyzer.
 4) Extract fields.
-5) Show fields and highlight their bounding boxes for human validation.
+5) Let a human validate and edit fields, and export the corrected data.
 
 --------------------------------------------------------------------------------
 
-## Contents
+Overall
+![alt text](images/overall.png)
 
-- app_main.py
-  Streamlit UI for classification, extraction, and visual validation.
-- prereq.py
-  One-time setup script to create the classifier and three analyzers.
+## Business Value
+
+This app helps business teams turn document review into a fast, reliable workflow:
+
+- Reduce manual effort: automated classification and extraction cut repetitive data entry.
+- Increase trust: every extracted value is tied to its location on the source document.
+- Speed up approvals: reviewers can verify and fix fields in one screen.
+- Improve consistency: standardized schemas keep outputs predictable across documents.
+- Control cost: usage visibility (tokens + estimated cost) makes processing transparent.
+
+--------------------------------------------------------------------------------
+
+## Files
+
+- `app_main.py`
+  Streamlit UI for classification, extraction, review, editing, and CSV export.
+- `prereq.py`
+  Creates the classifier and three analyzers used by the app.
+- `content_understanding_client.py`
+  Client wrapper used by both the app and the setup script.
 
 --------------------------------------------------------------------------------
 
@@ -27,233 +55,62 @@ The app implements the PRD workflow:
 2) Azure Content Understanding resource.
 3) Install required packages (typical):
 
+   ```bash
    pip install streamlit python-dotenv azure-identity pymupdf pillow requests
+   ```
 
 4) .env configured at repo root:
    - AZURE_AI_ENDPOINT
    - AZURE_AI_API_KEY (optional if using DefaultAzureCredential)
-   - CU_PRICE_PER_1K_INPUT (Standard pricing)
-   - CU_PRICE_PER_1K_OUTPUT (Standard pricing)
+   - CU_PRICE_PER_1K_INPUT
+   - CU_PRICE_PER_1K_OUTPUT
 
-   Example:
-   AZURE_AI_ENDPOINT=https://your-resource.services.ai.azure.com/
-   AZURE_AI_API_KEY=...
-   CU_PRICE_PER_1K_INPUT=0.00275
-   CU_PRICE_PER_1K_OUTPUT=0.011
+Example:
+```
+AZURE_AI_ENDPOINT=https://your-resource.services.ai.azure.com/
+AZURE_AI_API_KEY=...
+CU_PRICE_PER_1K_INPUT=0.00275
+CU_PRICE_PER_1K_OUTPUT=0.011
+```
 
 --------------------------------------------------------------------------------
 
-## One-time Setup: prereq.py
+## One-time Setup (prereq.py)
 
-### What it does
-
-`prereq.py` creates the resources required by the app:
+`prereq.py` creates:
 
 - Classifier: classifier_idp
 - Analyzer: analyzer_invoices
 - Analyzer: analyzer_bank_statements
 - Analyzer: analyzer_loan
 
-Each analyzer uses the custom field schema defined in the script.
-The classifier routes documents into:
-- Invoices
-- Bank Statements
-- Loan Application Form
+Analyzers created
 
-The script uses `begin_create_analyzer()` and `poll_result()` from
-`content_understanding_client.py`.
+![alt text](images/analyzers.png)
 
-### Run it
+Run once:
 
+```bash
 python idp_app/prereq.py
+```
 
-It will skip creation if the IDs already exist.
+It skips creation if these IDs already exist.
 
-### If you need different fields
+### Field Schemas
 
-Edit the field schemas inside:
-- build_invoice_analyzer()
-- build_bank_statement_analyzer()
-- build_loan_analyzer()
-
-Each schema supports primitives, arrays, and objects.
-
---------------------------------------------------------------------------------
-
-## App: app_main.py
-
-### What it does
-
-`app_main.py` is a Streamlit app that:
-
-1) Loads a PDF.
-2) Classifies it using the classifier analyzer.
-3) Picks the correct analyzer by label.
-4) Extracts fields and source regions.
-5) Renders the PDF and highlights selected fields.
-
-### Modes
-
-1) Live (Azure)
-   - Uses the Azure service to classify and extract.
-   - Requires valid AZURE_AI_ENDPOINT and auth.
-   - Uses the fixed IDs:
-     - classifier_idp
-     - analyzer_invoices
-     - analyzer_bank_statements
-     - analyzer_loan
-
-2) Offline (saved JSON)
-   - Loads a local JSON response and PDF.
-   - No Azure calls.
-   - Useful for demos.
-
-### How classification works
-
-The classifier is created as an analyzer. Classification calls:
-
-client.begin_analyze_binary(analyzer_id=classifier_idp, file_location=pdf)
-
-The result is scanned for the first category label and optional confidence.
-That label is mapped to the analyzer ID:
-
-- "Invoices" -> analyzer_invoices
-- "Bank Statements" -> analyzer_bank_statements
-- "Loan Application Form" -> analyzer_loan
-
-### Field extraction
-
-After routing, the app calls:
-
-client.begin_analyze_binary(analyzer_id=<mapped analyzer>, file_location=pdf)
-
-The response is parsed to extract:
-- field name
-- value
-- source regions (bounding boxes)
-
-The parser is defensive and handles multiple output shapes, including:
-- fields map under result.contents[*].fields
-- nested sources or source strings (D(...) format)
-- boundingRegions or polygon arrays
-
-### Bounding box overlay
-
-Bounding boxes are drawn on the rendered PDF pages.
-If page dimensions exist in the result, they are used to scale coordinates.
-If not, raw coordinates are drawn (may require adjustments if units differ).
-
-### Session cache
-
-To avoid repeated calls and slow re-renders, the app caches:
-- analysis results
-- extracted fields
-- rendered page images
-
-It re-runs classification/extraction only when the file changes.
-It re-renders the PDF only when the zoom changes.
-
-### Usage and cost estimation
-
-After extraction, the app displays:
-- model(s)
-- input/output/total tokens
-- estimated cost (if pricing env vars are set)
-
-Cost is estimated using:
-- CU_PRICE_PER_1K_INPUT
-- CU_PRICE_PER_1K_OUTPUT
-
-This is only the model token estimate. It does not include
-page-based extraction or contextualization meters.
-
---------------------------------------------------------------------------------
-
-## Running the App
-
-From repo root:
-
-streamlit run idp_app/app_main.py
-
-Then:
-1) Choose "Live (Azure)".
-2) Upload a PDF.
-3) Click Run.
-4) Select fields on the left to see their sources highlighted.
-
---------------------------------------------------------------------------------
-
-## Environment Variables Used
-
-Required:
-- AZURE_AI_ENDPOINT
-
-Optional (auth):
-- AZURE_AI_API_KEY
-
-Optional (cost estimate):
-- CU_PRICE_PER_1K_INPUT
-- CU_PRICE_PER_1K_OUTPUT
-
-Hardcoded IDs:
-- classifier_idp
-- analyzer_invoices
-- analyzer_bank_statements
-- analyzer_loan
-
---------------------------------------------------------------------------------
-
-## Troubleshooting
-
-### 404 Resource Not Found
-
-Cause:
-- The classifier/analyzers were not created, or
-- AZURE_AI_ENDPOINT points to a different resource.
-
-Fix:
-- Run prereq.py.
-- Confirm AZURE_AI_ENDPOINT matches the resource where you created them.
-
-### No fields found
-
-Cause:
-- Response shape mismatch or analyzer returned no fields.
-
-Fix:
-- Inspect analyzer schema.
-- Check the response in the expander (add one if needed).
-
-### Boxes do not align
-
-Cause:
-- Page dimensions missing or unit mismatch.
-
-Fix:
-- Ensure the analyzer returns page width/height.
-- Adjust scaling in draw_regions_on_page() if needed.
-
---------------------------------------------------------------------------------
-
-## Customize Field Schemas
-
-The field schemas live in prereq.py.
-To update, edit:
-- build_invoice_analyzer()
-- build_bank_statement_analyzer()
-- build_loan_analyzer()
-
-### Current Field Structures
-
-#### Invoices (analyzer_invoices)
-
+Invoices (analyzer_invoices)
 - VendorName (string, extract)
 - Items (array, generate)
   - Description (string)
   - Amount (number)
+- InvoiceNumber (string, extract)
+- InvoiceDate (string, extract)
+- DueDate (string, extract)
+- CustomerName (string, extract)
+- ServicePeriod (string, extract)
+- CustomerId (string, extract)
 
-#### Bank Statements (analyzer_bank_statements)
-
+Bank Statements (analyzer_bank_statements)
 - BankName (string, generate)
 - AccountHolder (string, generate)
 - AccountNumber (string, generate)
@@ -264,8 +121,7 @@ To update, edit:
 - TotalDeposits (number, generate)
 - TotalWithdrawals (number, generate)
 
-#### Loan Application Form (analyzer_loan)
-
+Loan Application Form (analyzer_loan)
 - ApplicationDate (date, generate)
 - ApplicantName (string, generate)
 - LoanAmountRequested (number, generate)
@@ -273,13 +129,99 @@ To update, edit:
 - CreditScore (number, generate)
 - Summary (string, generate)
 
-After editing, re-run prereq.py to recreate analyzers (delete old ones first
-if you do not want to reuse the same IDs).
+--------------------------------------------------------------------------------
+
+## App (app_main.py)
+
+### Modes
+
+1) Live (Azure)
+   - Calls the Azure service to classify and extract.
+   - Uses fixed IDs above.
+
+2) Offline (saved JSON)
+   - Loads a saved JSON response and PDF.
+   - No Azure calls.
+   - Defaults:
+     - test_output/invoice_analysis_result_20260116_094953.json
+     - data/invoice.pdf
+
+### Classification and Routing
+
+Classification is performed by calling the classifier as an analyzer:
+
+```python
+client.begin_analyze_binary(analyzer_id=classifier_idp, file_location=pdf)
+```
+
+The first category label found is used to route to the analyzer:
+- `"Invoices"` -> `analyzer_invoices`
+- `"Bank Statements"` -> `analyzer_bank_statements`
+- `"Loan Application Form"` -> `analyzer_loan`
+
+### Review UI
+
+Left panel:
+- Extracted fields (business-friendly view).
+- Select a field to highlight its bounding boxes.
+- Editable Fields: all fields shown at once in a tall scrollable editor.
+  - Primitive fields: text input
+  - Arrays (Items): grid editor
+  - Objects/lists: JSON editor
+- Download CSV button to export corrected values.
+
+Right panel:
+- Rendered PDF with bounding boxes for the selected field.
+- Page navigation.
+
+### CSV Export
+
+The "Download CSV" button exports the edited data with columns:
+- field
+- value
+- item_index
+- item_description
+- item_amount
+
+Items arrays are expanded into multiple rows.
+
+### Usage and Cost
+
+If the response includes usage, the app shows:
+- Model(s)
+- Token counts
+- Estimated cost (using CU_PRICE_PER_1K_INPUT / CU_PRICE_PER_1K_OUTPUT)
+
+This estimate covers model tokens only (not page-based extraction meters).
 
 --------------------------------------------------------------------------------
 
-## Notes
+## Running the App
 
-- The classifier is created as an analyzer and called via analyzeBinary.
-- The app avoids showing raw JSON to keep the UI business-friendly.
-- The app uses DefaultAzureCredential if AZURE_AI_API_KEY is empty.
+From repo root:
+
+```bash
+streamlit run idp_app/app_main.py
+```
+
+Then:
+1) Choose Live or Offline mode.
+2) Upload a PDF (Live) or use defaults (Offline).
+3) Click Run.
+4) Review, edit, and download the CSV.
+
+--------------------------------------------------------------------------------
+
+## Troubleshooting
+
+### 404 Resource Not Found
+- Ensure prereq.py ran successfully.
+- Confirm AZURE_AI_ENDPOINT points to the correct resource.
+
+### No fields found
+- Check analyzer schema and output shape.
+- Verify the document matches the analyzer.
+
+### Bounding boxes misaligned
+- Ensure page dimensions are returned in the result.
+- Adjust scaling logic if needed.

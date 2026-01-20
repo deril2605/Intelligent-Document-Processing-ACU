@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import tempfile
+import csv
 from typing import Any, Dict, List, Optional, Tuple
 
 import fitz  # PyMuPDF
@@ -385,6 +386,30 @@ def _format_items_preview(rows: List[Dict[str, Any]]) -> str:
     return f"{len(rows)} item(s): " + "; ".join(parts) + (f" {more}" if more else "")
 
 
+def _fields_to_csv(edited_fields: Dict[str, Any], field_order: List[str]) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["field", "value", "item_index", "item_description", "item_amount"])
+
+    for name in field_order:
+        value = edited_fields.get(name)
+        if isinstance(value, list):
+            rows = _items_to_rows(value)
+            if rows:
+                for idx, row in enumerate(rows, start=1):
+                    desc = row.get("Description") or row.get("description") or ""
+                    amt = row.get("Amount") or row.get("amount")
+                    writer.writerow([name, "", idx, desc, amt])
+            else:
+                writer.writerow([name, json.dumps(value), "", "", ""])
+        elif isinstance(value, dict):
+            writer.writerow([name, json.dumps(value), "", "", ""])
+        else:
+            writer.writerow([name, value, "", "", ""])
+
+    return output.getvalue()
+
+
 def _find_first_category(obj: Any) -> Optional[Tuple[str, Optional[float]]]:
     if isinstance(obj, dict):
         if "category" in obj and isinstance(obj["category"], str):
@@ -510,8 +535,14 @@ with st.sidebar:
         label_c = st.text_input("Label for Type C", value="Loan Application Form", disabled=True)
         analyzer_c = st.text_input("Analyzer ID for Type C", value=ANALYZER_LOAN_ID, disabled=True)
     else:
-        json_path = st.text_input("Path to saved JSON result", value="test_output/sample_result.json")
-        pdf_path = st.text_input("Path to source PDF", value="data/sample.pdf")
+        json_path = st.text_input(
+            "Path to saved JSON result",
+            value="test_output/invoice_analysis_result_20260116_094953.json",
+        )
+        pdf_path = st.text_input(
+            "Path to source PDF",
+            value="data/invoice.pdf",
+        )
 
     zoom = st.slider("PDF render zoom", min_value=1.0, max_value=4.0, value=2.0, step=0.5)
     run_btn = st.button("Run", type="primary")
@@ -749,6 +780,16 @@ if st.session_state.analysis_fields and st.session_state.page_images:
                         value=_pretty_value(field_value),
                         key=edit_key,
                     )
+
+        st.markdown("#### Confirm and Download")
+        ordered_names = [f["name"] for f in fields]
+        csv_data = _fields_to_csv(edited_fields, ordered_names)
+        st.download_button(
+            label="Download CSV",
+            data=csv_data,
+            file_name="extracted_fields.csv",
+            mime="text/csv",
+        )
 
         if selected_field.get("regions"):
             pages_for_field = sorted({r["pageNumber"] for r in selected_field["regions"]})
