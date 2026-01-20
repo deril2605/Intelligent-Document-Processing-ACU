@@ -28,6 +28,7 @@ ANALYZER_BANK_STATEMENTS_ID = "analyzer_bank_statements"
 ANALYZER_LOAN_ID = "analyzer_loan"
 
 MAX_FILE_MB = 20
+EDITOR_PANEL_HEIGHT = 800
 
 
 def token_provider() -> str:
@@ -697,50 +698,57 @@ if st.session_state.analysis_fields and st.session_state.page_images:
         current_value = edited_fields.get(selected_field["name"], value)
         st.write("Value:", _summarize_value(current_value))
 
-        st.markdown("#### Editable Value")
-        edit_key = f"edit_{selected_field['name']}"
-        if isinstance(current_value, list):
-            rows = _items_to_rows(current_value)
-            if rows:
-                edited_rows = st.data_editor(
-                    rows,
-                    use_container_width=True,
-                    num_rows="dynamic",
-                    key=edit_key,
-                )
-                edited_fields[selected_field["name"]] = edited_rows
-            else:
-                edited_text = st.text_area(
-                    "Items (JSON)",
-                    value=json.dumps(current_value, indent=2),
-                    key=edit_key,
-                )
-                try:
-                    edited_fields[selected_field["name"]] = json.loads(edited_text)
-                except Exception:
-                    st.caption("Invalid JSON. Fix to apply edits.")
-        elif isinstance(current_value, dict):
-            edited_text = st.text_area(
-                "Details (JSON)",
-                value=json.dumps(current_value, indent=2),
-                key=edit_key,
-            )
-            try:
-                edited_fields[selected_field["name"]] = json.loads(edited_text)
-            except Exception:
-                st.caption("Invalid JSON. Fix to apply edits.")
-        elif isinstance(current_value, bool):
-            edited_fields[selected_field["name"]] = st.checkbox(
-                "Value",
-                value=current_value,
-                key=edit_key,
-            )
-        else:
-            edited_fields[selected_field["name"]] = st.text_input(
-                "Value",
-                value=_pretty_value(current_value),
-                key=edit_key,
-            )
+        st.markdown("#### Editable Fields")
+        editor_container = st.container(height=EDITOR_PANEL_HEIGHT)
+        with editor_container:
+            for fobj in fields:
+                field_name = fobj["name"]
+                field_value = edited_fields.get(field_name, fobj.get("value"))
+                st.markdown(f"**{field_name}**")
+                edit_key = f"edit_{field_name}"
+
+                if isinstance(field_value, list):
+                    rows = _items_to_rows(field_value)
+                    if rows:
+                        edited_rows = st.data_editor(
+                            rows,
+                            use_container_width=True,
+                            num_rows="dynamic",
+                            key=edit_key,
+                        )
+                        edited_fields[field_name] = edited_rows
+                    else:
+                        edited_text = st.text_area(
+                            "Items (JSON)",
+                            value=json.dumps(field_value, indent=2),
+                            key=edit_key,
+                        )
+                        try:
+                            edited_fields[field_name] = json.loads(edited_text)
+                        except Exception:
+                            st.caption("Invalid JSON. Fix to apply edits.")
+                elif isinstance(field_value, dict):
+                    edited_text = st.text_area(
+                        "Details (JSON)",
+                        value=json.dumps(field_value, indent=2),
+                        key=edit_key,
+                    )
+                    try:
+                        edited_fields[field_name] = json.loads(edited_text)
+                    except Exception:
+                        st.caption("Invalid JSON. Fix to apply edits.")
+                elif isinstance(field_value, bool):
+                    edited_fields[field_name] = st.checkbox(
+                        "Value",
+                        value=field_value,
+                        key=edit_key,
+                    )
+                else:
+                    edited_fields[field_name] = st.text_input(
+                        "Value",
+                        value=_pretty_value(field_value),
+                        key=edit_key,
+                    )
 
         if selected_field.get("regions"):
             pages_for_field = sorted({r["pageNumber"] for r in selected_field["regions"]})
