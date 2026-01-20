@@ -99,35 +99,188 @@ It skips creation if these IDs already exist.
 ### Field Schemas
 
 Invoices (analyzer_invoices)
-- VendorName (string, extract)
-- Items (array, generate)
-  - Description (string)
-  - Amount (number)
-- InvoiceNumber (string, extract)
-- InvoiceDate (string, extract)
-- DueDate (string, extract)
-- CustomerName (string, extract)
-- ServicePeriod (string, extract)
-- CustomerId (string, extract)
+```json
+{
+  "baseAnalyzerId": "prebuilt-document",
+  "description": "Invoice analyzer that extracts vendor and line items",
+  "config": {
+    "returnDetails": true,
+    "enableOcr": true,
+    "enableLayout": true,
+    "estimateFieldSourceAndConfidence": true
+  },
+  "fieldSchema": {
+    "name": "InvoiceFields",
+    "fields": {
+      "VendorName": {
+        "type": "string",
+        "method": "extract",
+        "description": "Name of the vendor or supplier, typically in the header."
+      },
+      "Items": {
+        "type": "array",
+        "method": "generate",
+        "description": "List of items or services on the invoice.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "Description": { "type": "string", "description": "Item description" },
+            "Amount": { "type": "number", "description": "Line total amount" }
+          }
+        }
+      },
+      "InvoiceNumber": {
+        "type": "string",
+        "method": "extract",
+        "description": "Invoice identifier (e.g., INV-100)."
+      },
+      "InvoiceDate": {
+        "type": "string",
+        "method": "extract",
+        "description": "Invoice issue date."
+      },
+      "DueDate": {
+        "type": "string",
+        "method": "extract",
+        "description": "Invoice due date."
+      },
+      "CustomerName": {
+        "type": "string",
+        "method": "extract",
+        "description": "Customer name (top-right block)."
+      },
+      "ServicePeriod": {
+        "type": "string",
+        "method": "extract",
+        "description": "Service period range (e.g., 10/14/2019 - 11/14/2019)."
+      },
+      "CustomerId": {
+        "type": "string",
+        "method": "extract",
+        "description": "Customer identifier (e.g., CID-12345)."
+      }
+    }
+  },
+  "models": { "completion": "gpt-4.1-mini" },
+  "tags": { "doc_type": "Invoices", "demo": "invoice" }
+}
+```
 
 Bank Statements (analyzer_bank_statements)
-- BankName (string, generate)
-- AccountHolder (string, generate)
-- AccountNumber (string, generate)
-- StatementStartDate (date, generate)
-- StatementEndDate (date, generate)
-- BeginningBalance (number, generate)
-- EndingBalance (number, generate)
-- TotalDeposits (number, generate)
-- TotalWithdrawals (number, generate)
+```json
+{
+  "baseAnalyzerId": "prebuilt-document",
+  "description": "Bank statement analyzer that extracts account and balance details",
+  "config": {
+    "returnDetails": true,
+    "enableOcr": true,
+    "enableLayout": true,
+    "estimateFieldSourceAndConfidence": true
+  },
+  "fieldSchema": {
+    "name": "BankStatementFields",
+    "fields": {
+      "BankName": {
+        "type": "string",
+        "method": "generate",
+        "description": "Name of the bank issuing the statement."
+      },
+      "AccountHolder": {
+        "type": "string",
+        "method": "generate",
+        "description": "Account holder name."
+      },
+      "AccountNumber": {
+        "type": "string",
+        "method": "generate",
+        "description": "Account number shown on the statement."
+      },
+      "StatementStartDate": {
+        "type": "date",
+        "method": "generate",
+        "description": "Statement period start date."
+      },
+      "StatementEndDate": {
+        "type": "date",
+        "method": "generate",
+        "description": "Statement period end date."
+      },
+      "BeginningBalance": {
+        "type": "number",
+        "method": "generate",
+        "description": "Opening balance for the period."
+      },
+      "EndingBalance": {
+        "type": "number",
+        "method": "generate",
+        "description": "Closing balance for the period."
+      },
+      "TotalDeposits": {
+        "type": "number",
+        "method": "generate",
+        "description": "Sum of deposits in the statement period."
+      },
+      "TotalWithdrawals": {
+        "type": "number",
+        "method": "generate",
+        "description": "Sum of withdrawals in the statement period."
+      }
+    }
+  },
+  "models": { "completion": "gpt-4.1-mini" },
+  "tags": { "doc_type": "Bank Statements", "demo": "bank-statement" }
+}
+```
 
 Loan Application Form (analyzer_loan)
-- ApplicationDate (date, generate)
-- ApplicantName (string, generate)
-- LoanAmountRequested (number, generate)
-- LoanPurpose (string, generate)
-- CreditScore (number, generate)
-- Summary (string, generate)
+```json
+{
+  "baseAnalyzerId": "prebuilt-document",
+  "description": "Loan application analyzer - extracts key information",
+  "config": {
+    "returnDetails": true,
+    "enableLayout": true,
+    "enableFormula": false,
+    "estimateFieldSourceAndConfidence": true
+  },
+  "fieldSchema": {
+    "fields": {
+      "ApplicationDate": {
+        "type": "date",
+        "method": "generate",
+        "description": "Date when the loan application was submitted."
+      },
+      "ApplicantName": {
+        "type": "string",
+        "method": "generate",
+        "description": "Full name of the loan applicant or company."
+      },
+      "LoanAmountRequested": {
+        "type": "number",
+        "method": "generate",
+        "description": "Total loan amount requested by the applicant."
+      },
+      "LoanPurpose": {
+        "type": "string",
+        "method": "generate",
+        "description": "Stated purpose or reason for the loan."
+      },
+      "CreditScore": {
+        "type": "number",
+        "method": "generate",
+        "description": "Credit score of the applicant, if available."
+      },
+      "Summary": {
+        "type": "string",
+        "method": "generate",
+        "description": "Brief summary overview of the loan application details."
+      }
+    }
+  },
+  "models": { "completion": "gpt-4.1-mini" },
+  "tags": { "doc_type": "Loan Application Form", "demo": "loan-application" }
+}
+```
 
 --------------------------------------------------------------------------------
 
